@@ -18,10 +18,10 @@ def run_python_file(working_directory, file_path, args=[]):
         stderr = completed_process.stderr
         returncode = completed_process.returncode
         result = ''
-        if stdout:
-            result += f'STDOUT: {stdout}\n'
-        if stderr:
-            result += f'STDERR: {stderr}\n'
+        # For successful runs, combine stdout and stderr since test frameworks use stderr
+        if returncode == 0:
+            output = stdout + stderr
+            return output.strip() if output else 'No output produced.'
         if returncode != 0:
             result += f'Process exited with {returncode}\n'
         if result == '':
@@ -36,7 +36,7 @@ schema_run_python_file = types.FunctionDeclaration(
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
-            "file+path": types.Schema(
+            "file_path": types.Schema(
                 type=types.Type.STRING,
                 description="The file path to the Python file to be run, relative to the working directory.",
             ),
