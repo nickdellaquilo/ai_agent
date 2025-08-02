@@ -16,8 +16,8 @@ def main():
         print('Example: python main.py "How do I fix the calculator?"')
         exit(1)
 
-    if len(sys.argv) > 2:
-        verbose = ("--verbose" in sys.argv)
+    #if len(sys.argv) > 2:
+    verbose = ("--verbose" in sys.argv)
 
     user_prompt = sys.argv[1]
 
@@ -32,7 +32,22 @@ def main():
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
 
-    generate_content(client, messages, model_name, verbose)
+    for i in range(20):
+        try:
+            #print(f"DEBUG: Messages: {messages}")
+            response_text = generate_content(client, messages, model_name, verbose)
+            if response_text:
+                print("Final response:")
+                print(response_text)
+                break
+        except ConnectionError:
+            print("Error: Connection lost. Wait a moment and try again.")
+        except TimeoutError:
+            print("Connection timed out, trying again...")
+        except KeyboardInterrupt:
+            print("Request cancelled by user.")
+            break
+            
 
 def generate_content(client, messages, model_name, verbose):
     response = client.models.generate_content(
@@ -49,19 +64,23 @@ def generate_content(client, messages, model_name, verbose):
     if not response.function_calls:
         return response.text
 
+    for candidate in response.candidates:
+        messages.append(candidate.content)
+
     function_responses = []
-    print(f"DEBUG: Found {len(response.function_calls)} function calls")
+    #print(f"DEBUG: Found {len(response.function_calls)} function calls")
     for function_call_part in response.function_calls:
-        print(f"DEBUG: About to call function: {function_call_part.name}")
+        #print(f"DEBUG: About to call function: {function_call_part.name}")
         function_call_result = call_function(function_call_part, verbose)
-        print(f"DEBUG: Function call completed")
+        function_name = function_call_part.name
+        #print(f"DEBUG: Function call completed")
         if (
             not function_call_result.parts
             or not function_call_result.parts[0].function_response
         ):
             raise Exception("empty function call result")
+        result_data = function_call_result.parts[0].function_response.response
         if verbose:
-            result_data = function_call_result.parts[0].function_response.response
             if isinstance(result_data, dict) and 'result' in result_data:
                 print(f"-> {result_data['result']}")
             else:
@@ -72,6 +91,15 @@ def generate_content(client, messages, model_name, verbose):
     if not function_responses:
         raise Exception("no function responses generated, exiting.")
 
+    #messages.append(types.Content(role="tool", parts=function_responses))
+    messages.append(types.Content(
+        role="model", parts=[types.Part(
+            function_response=types.FunctionResponse(
+                name=function_name,
+                response=result_data
+            )
+        )]
+    ))
 
 if __name__ == "__main__":
     main()
